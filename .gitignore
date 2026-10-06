@@ -1,0 +1,15 @@
+# Build results
+bin/
+obj/
+*.user
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# Visual Studio
+.vs/
+
+# NuGet
+*.nupkg

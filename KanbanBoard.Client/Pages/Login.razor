@@ -1,0 +1,48 @@
+﻿@page "/login"
+@using KanbanBoard.Client.Services
+@inject ApiService Api
+@inject NavigationManager Nav
+
+<h3>Вход в Kanban-доску</h3>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div style="color:red">@error</div>
+}
+
+<p>
+    <label>Логин:</label><br />
+    <input @bind="login" />
+</p>
+<p>
+    <label>Пароль:</label><br />
+    <input type="password" @bind="password" />
+</p>
+
+<button @onclick="DoLogin">Войти</button>
+<button @onclick="DoRegister">Регистрация</button>
+
+@code {
+    private string login = "";
+    private string password = "";
+    private string? error;
+
+    private async Task DoLogin()
+    {
+        var result = await Api.LoginAsync(login, password);
+        if (result?.Success == true)
+        {
+            Nav.NavigateTo("/projects");
+        }
+        else
+        {
+            error = "Неверный логин или пароль";
+        }
+    }
+
+    private async Task DoRegister()
+    {
+        var ok = await Api.RegisterAsync(login, password);
+        error = ok ? "Готово! Теперь войдите." : "Ошибка регистрации";
+    }
+}

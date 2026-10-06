@@ -1,0 +1,147 @@
+﻿@page "/boardpage/{projectId:int}"
+@using KanbanBoard.Client.Services
+@inject ApiService Api
+@inject NavigationManager Nav
+
+<h3>Доска проекта</h3>
+
+<p>
+    <select @bind="currentBoardId" @bind:after="LoadColumns">
+        <option value="0">-- выберите доску --</option>
+        @foreach (var b in boards ?? new())
+        {
+            <option value="@b.Id">@b.Name</option>
+        }
+    </select>
+    <input @bind="newBoardName" placeholder="Новая доска" />
+    <button @onclick="CreateBoard">+ Доска</button>
+</p>
+
+@if (currentBoardId > 0)
+{
+    <p>
+        <input @bind="newColumnName" placeholder="Новая колонка" />
+        <button @onclick="CreateColumn">+ Колонка</button>
+    </p>
+
+    <div style="display:flex; gap:10px;">
+        @foreach (var col in columns ?? new())
+        {
+            <div style="border:1px solid gray; padding:10px; min-width:250px; background:#f5f5f5;">
+                <h4>@col.Name @(col.WipLimit.HasValue ? $"({col.WipLimit})" : "")</h4>
+
+                <input value="@GetCardTitle(col.Id)"
+                       @oninput="e => SetCardTitle(col.Id, e.Value?.ToString())"
+                       placeholder="Новая карточка" />
+                <button @onclick="() => CreateCard(col.Id)">+</button>
+
+                @foreach (var card in col.Cards)
+                {
+                    <div style="border:1px solid #ccc; padding:5px; margin:5px 0; background:white;">
+                        <b>@card.Title</b>
+                        <span style="color:gray; font-size:12px;"> [@card.Priority]</span>
+                        <br />
+                        <button @onclick="() => MoveCard(card.Id, -1)">←</button>
+                        <button @onclick="() => MoveCard(card.Id, +1)">→</button>
+                        <button @onclick="() => DeleteCard(card.Id)">×</button>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public int ProjectId { get; set; }
+
+    private List<Board>? boards;
+    private List<Column>? columns;
+    private int currentBoardId = 0;
+
+    private string newBoardName = "";
+    private string newColumnName = "";
+    private Dictionary<int, string> newCardTitles = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!await Api.IsAuthenticatedAsync())
+        {
+            Nav.NavigateTo("/login");
+            return;
+        }
+        boards = await Api.GetBoardsAsync(ProjectId);
+        StateHasChanged();
+    }
+
+    private async Task LoadColumns()
+    {
+        if (currentBoardId > 0)
+        {
+            columns = await Api.GetColumnsAsync(currentBoardId);
+            StateHasChanged();
+        }
+    }
+
+    private async Task CreateBoard()
+    {
+        if (string.IsNullOrWhiteSpace(newBoardName)) return;
+        await Api.CreateBoardAsync(newBoardName, ProjectId);
+        newBoardName = "";
+        boards = await Api.GetBoardsAsync(ProjectId);
+        StateHasChanged();
+    }
+
+    private async Task CreateColumn()
+    {
+        if (string.IsNullOrWhiteSpace(newColumnName)) return;
+        await Api.CreateColumnAsync(newColumnName, currentBoardId);
+        newColumnName = "";
+        await LoadColumns();
+        StateHasChanged();
+    }
+
+    private async Task CreateCard(int columnId)
+    {
+        if (!newCardTitles.TryGetValue(columnId, out var title) || string.IsNullOrWhiteSpace(title))
+            return;
+        await Api.CreateCardAsync(title, columnId);
+        newCardTitles[columnId] = "";
+        await LoadColumns();
+        StateHasChanged();
+    }
+
+    private async Task MoveCard(int cardId, int direction)
+    {
+        if (columns == null) return;
+        var card = columns.SelectMany(c => c.Cards).FirstOrDefault(c => c.Id == cardId);
+        if (card == null) return;
+
+        var currentIndex = columns.FindIndex(c => c.Id == card.ColumnId);
+        var newIndex = currentIndex + direction;
+        if (newIndex < 0 || newIndex >= columns.Count) return;
+
+        await Api.MoveCardAsync(cardId, columns[newIndex].Id);
+        await LoadColumns();
+        StateHasChanged();
+    }
+
+    private async Task DeleteCard(int cardId)
+    {
+        await Api.DeleteCardAsync(cardId);
+        await LoadColumns();
+        StateHasChanged();
+    }
+
+
+    private string GetCardTitle(int columnId)
+    {
+        if (newCardTitles.TryGetValue(columnId, out var value))
+            return value;
+        return string.Empty;
+    }
+
+    private void SetCardTitle(int columnId, string? value)
+    {
+        newCardTitles[columnId] = value ?? string.Empty;
+    }
+}

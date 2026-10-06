@@ -1,0 +1,54 @@
+﻿@page "/projects"
+@using KanbanBoard.Client.Services
+@inject ApiService Api
+@inject NavigationManager Nav
+
+<h3>Мои проекты</h3>
+
+<p>
+    <input @bind="newProjectName" placeholder="Название проекта" />
+    <button @onclick="CreateProject">Создать</button>
+</p>
+
+@if (projects == null)
+{
+    <p>Загрузка...</p>
+}
+else if (projects.Count == 0)
+{
+    <p>Проектов пока нет.</p>
+}
+else
+{
+    <ul>
+        @foreach (var p in projects)
+        {
+            <li>
+                <a href="/boardpage/@p.Id">@p.Name</a>
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    private List<Project>? projects;
+    private string newProjectName = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!await Api.IsAuthenticatedAsync())
+        {
+            Nav.NavigateTo("/login");
+            return;
+        }
+        projects = await Api.GetProjectsAsync();
+    }
+
+    private async Task CreateProject()
+    {
+        if (string.IsNullOrWhiteSpace(newProjectName)) return;
+        await Api.CreateProjectAsync(newProjectName);
+        newProjectName = "";
+        projects = await Api.GetProjectsAsync();
+    }
+}
