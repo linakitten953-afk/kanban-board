@@ -8,10 +8,14 @@ namespace KanbanBoard.Api.Services;
 public class CardService : ICardService
 {
     private readonly AppDbContext _context;
-    public CardService(AppDbContext context) => _context = context;
+
+    public CardService(AppDbContext context)
+    {
+        _context = context;
+    }
 
     public async Task<OperationResult> CreateCardAsync(string title, int columnId,
-        int? assigneeId, string priority)
+        int? assigneeId, string priority, DateTime? deadline = null)
     {
         if (string.IsNullOrWhiteSpace(title))
             return OperationResult.Fail("Название обязательно");
@@ -30,8 +34,27 @@ public class CardService : ICardService
             Title = title,
             ColumnId = columnId,
             AssigneeId = assigneeId,
-            Priority = priority
+            Priority = priority,
+            Deadline = deadline
         });
+        await _context.SaveChangesAsync();
+        return OperationResult.SuccessResult();
+    }
+
+    public async Task<OperationResult> UpdateCardAsync(int cardId, string title,
+        string priority, DateTime? deadline, int? assigneeId)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+            return OperationResult.Fail("Название обязательно");
+
+        var card = await _context.Cards.FindAsync(cardId);
+        if (card == null) return OperationResult.Fail("Карточка не найдена");
+
+        card.Title = title;
+        card.Priority = priority;
+        card.Deadline = deadline;
+        card.AssigneeId = assigneeId;
+
         await _context.SaveChangesAsync();
         return OperationResult.SuccessResult();
     }

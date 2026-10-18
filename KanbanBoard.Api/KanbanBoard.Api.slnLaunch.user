@@ -1,0 +1,15 @@
+[
+  {
+    "Name": "Новый профиль",
+    "Projects": [
+      {
+        "Path": "KanbanBoard.Api.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "..\\KanbanBoard.Client\\KanbanBoard.Client.csproj",
+        "Action": "Start"
+      }
+    ]
+  }
+]
