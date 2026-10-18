@@ -1,6 +1,5 @@
 ﻿using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Text.Json;
 using Blazored.LocalStorage;
 
 namespace KanbanBoard.Client.Services;
@@ -25,6 +24,7 @@ public class ApiService
                 new AuthenticationHeaderValue("Bearer", token);
         }
     }
+
 
     public async Task<AuthResponse?> LoginAsync(string login, string password)
     {
@@ -61,6 +61,13 @@ public class ApiService
         return !string.IsNullOrWhiteSpace(token);
     }
 
+    public async Task<List<UserDto>?> GetUsersAsync()
+    {
+        await AddAuthHeaderAsync();
+        return await _http.GetFromJsonAsync<List<UserDto>>("api/Auth/users");
+    }
+
+
     public async Task<List<Project>?> GetProjectsAsync()
     {
         await AddAuthHeaderAsync();
@@ -74,6 +81,7 @@ public class ApiService
         return response.IsSuccessStatusCode;
     }
 
+
     public async Task<List<Board>?> GetBoardsAsync(int projectId)
     {
         await AddAuthHeaderAsync();
@@ -86,6 +94,7 @@ public class ApiService
         var response = await _http.PostAsJsonAsync("api/Boards", new { name, projectId });
         return response.IsSuccessStatusCode;
     }
+
 
     public async Task<List<Column>?> GetColumnsAsync(int boardId)
     {
@@ -101,11 +110,33 @@ public class ApiService
         return response.IsSuccessStatusCode;
     }
 
-    public async Task<bool> CreateCardAsync(string title, int columnId)
+
+    public async Task<bool> CreateCardAsync(string title, int columnId,
+        int? assigneeId = null, string priority = "Medium", DateTime? deadline = null)
     {
         await AddAuthHeaderAsync();
-        var response = await _http.PostAsJsonAsync("api/Cards",
-            new { title, columnId, priority = "Medium" });
+        var response = await _http.PostAsJsonAsync("api/Cards", new
+        {
+            title,
+            columnId,
+            assigneeId,
+            priority,
+            deadline
+        });
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<bool> UpdateCardAsync(int cardId, string title, string priority,
+        DateTime? deadline, int? assigneeId)
+    {
+        await AddAuthHeaderAsync();
+        var response = await _http.PutAsJsonAsync($"api/Cards/{cardId}", new
+        {
+            title,
+            priority,
+            deadline,
+            assigneeId
+        });
         return response.IsSuccessStatusCode;
     }
 
@@ -124,6 +155,7 @@ public class ApiService
     }
 }
 
+
 public class AuthResponse
 {
     public bool Success { get; set; }
@@ -131,6 +163,13 @@ public class AuthResponse
     public string? ErrorMessage { get; set; }
     public string? Login { get; set; }
     public string? Role { get; set; }
+}
+
+public class UserDto
+{
+    public int Id { get; set; }
+    public string Login { get; set; } = "";
+    public string Role { get; set; } = "";
 }
 
 public class Project
@@ -162,4 +201,6 @@ public class Card
     public string Title { get; set; } = "";
     public string Priority { get; set; } = "Medium";
     public int ColumnId { get; set; }
+    public int? AssigneeId { get; set; }
+    public DateTime? Deadline { get; set; }
 }

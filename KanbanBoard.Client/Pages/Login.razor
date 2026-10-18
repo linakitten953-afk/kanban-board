@@ -5,22 +5,43 @@
 
 <h3>Вход в Kanban-доску</h3>
 
-@if (!string.IsNullOrEmpty(error))
-{
-    <div style="color:red">@error</div>
-}
+<div style="max-width:420px; background:rgba(255,255,255,0.9); backdrop-filter:blur(10px);
+            padding:32px 36px; border-radius:20px;
+            box-shadow:0 16px 48px rgba(142,110,217,0.2);">
 
-<p>
-    <label>Логин:</label><br />
-    <input @bind="login" />
-</p>
-<p>
-    <label>Пароль:</label><br />
-    <input type="password" @bind="password" />
-</p>
+    @if (!string.IsNullOrEmpty(error))
+    {
+        <div style="color:#c0392b; margin-bottom:16px; padding:10px;
+                        background:#ffeaea; border-radius:8px; font-size:14px;">
+            @error
+        </div>
+    }
 
-<button @onclick="DoLogin">Войти</button>
-<button @onclick="DoRegister">Регистрация</button>
+    <label style="display:block; color:#5a3fa0; font-weight:600;
+                  font-size:13px; margin-bottom:6px; text-transform:uppercase;">
+        Логин
+    </label>
+    <input @bind="login"
+           style="width:100%; padding:12px 16px; border:1.5px solid #d4c5f0;
+                  border-radius:10px; font-size:14px; margin-bottom:16px;
+                  box-sizing:border-box;" />
+
+    <label style="display:block; color:#5a3fa0; font-weight:600;
+                  font-size:13px; margin-bottom:6px; text-transform:uppercase;">
+        Пароль
+    </label>
+    <input type="password" @bind="password"
+           style="width:100%; padding:12px 16px; border:1.5px solid #d4c5f0;
+                  border-radius:10px; font-size:14px; margin-bottom:24px;
+                  box-sizing:border-box;" />
+
+    <div style="display:flex; gap:10px;">
+        <button @onclick="DoLogin" style="flex:1;">Войти</button>
+        <button @onclick="DoRegister" style="flex:1; background:linear-gradient(135deg,#f8b4c8 0%,#b8a3e8 100%);">
+            Регистрация
+        </button>
+    </div>
+</div>
 
 @code {
     private string login = "";

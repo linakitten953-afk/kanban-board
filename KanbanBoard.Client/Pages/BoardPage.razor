@@ -1,11 +1,14 @@
 ﻿@page "/boardpage/{projectId:int}"
 @using KanbanBoard.Client.Services
+@using Microsoft.JSInterop
 @inject ApiService Api
 @inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IDisposable
 
 <h3>Доска проекта</h3>
 
-<p>
+<div class="kanban-toolbar">
     <select @bind="currentBoardId" @bind:after="LoadColumns">
         <option value="0">-- выберите доску --</option>
         @foreach (var b in boards ?? new())
@@ -15,52 +18,230 @@
     </select>
     <input @bind="newBoardName" placeholder="Новая доска" />
     <button @onclick="CreateBoard">+ Доска</button>
-</p>
 
-@if (currentBoardId > 0)
-{
-    <p>
+    @if (currentBoardId > 0)
+    {
         <input @bind="newColumnName" placeholder="Новая колонка" />
         <button @onclick="CreateColumn">+ Колонка</button>
-    </p>
+    }
+</div>
 
-    <div style="display:flex; gap:10px;">
-        @foreach (var col in columns ?? new())
-        {
-            <div style="border:1px solid gray; padding:10px; min-width:250px; background:#f5f5f5;">
-                <h4>@col.Name @(col.WipLimit.HasValue ? $"({col.WipLimit})" : "")</h4>
+@if ((boards == null || boards.Count == 0))
+{
+    <div class="empty-state">
+        <div class="empty-state-icon">▢</div>
+        <div class="empty-state-title">В проекте ещё нет досок</div>
+        <div class="empty-state-text">
+            Создайте первую доску выше, чтобы начать работу.
+        </div>
+    </div>
+}
+else if (currentBoardId == 0)
+{
+    <div class="empty-state">
+        <div class="empty-state-icon">◈</div>
+        <div class="empty-state-title">Выберите доску</div>
+        <div class="empty-state-text">
+            Воспользуйтесь выпадающим списком выше, чтобы начать работу.
+        </div>
+    </div>
+}
+else
+{
+    <div class="search-bar">
+        <input @bind="searchText" @bind:event="oninput"
+               placeholder="Поиск по карточкам"
+               class="search-input" />
+    </div>
 
-                <input value="@GetCardTitle(col.Id)"
-                       @oninput="e => SetCardTitle(col.Id, e.Value?.ToString())"
-                       placeholder="Новая карточка" />
-                <button @onclick="() => CreateCard(col.Id)">+</button>
-
-                @foreach (var card in col.Cards)
-                {
-                    <div style="border:1px solid #ccc; padding:5px; margin:5px 0; background:white;">
-                        <b>@card.Title</b>
-                        <span style="color:gray; font-size:12px;"> [@card.Priority]</span>
-                        <br />
-                        <button @onclick="() => MoveCard(card.Id, -1)">←</button>
-                        <button @onclick="() => MoveCard(card.Id, +1)">→</button>
-                        <button @onclick="() => DeleteCard(card.Id)">×</button>
-                    </div>
-                }
+    @if (columns == null || columns.Count == 0)
+    {
+        <div class="empty-state">
+            <div class="empty-state-icon">▤</div>
+            <div class="empty-state-title">На доске пока нет колонок</div>
+            <div class="empty-state-text">
+                Добавьте первую колонку выше, чтобы начать работать с карточками.
             </div>
-        }
+        </div>
+    }
+    else
+    {
+        <div class="progress-panel">
+            <div class="progress-stat">
+                <div class="progress-stat-label">Всего задач</div>
+                <div class="progress-stat-value">@TotalCards</div>
+            </div>
+            <div class="progress-stat">
+                <div class="progress-stat-label">Выполнено</div>
+                <div class="progress-stat-value">@DoneCards</div>
+            </div>
+            <div class="progress-stat">
+                <div class="progress-stat-label">Прогресс</div>
+                <div class="progress-stat-value">@ProgressPercent%</div>
+            </div>
+            <div class="progress-bar-wrapper">
+                <div class="progress-bar-fill" style="width: @ProgressPercent%;"></div>
+            </div>
+        </div>
+
+        <div class="kanban-board">
+            @foreach (var col in columns ?? new())
+            {
+                <div class="kanban-column" style="border-top: 4px solid @GetColumnColor(col.Order);">
+                    <h4>
+                        <span class="column-name">@col.Name</span>
+                        <span class="column-count">@col.Cards.Count</span>
+                    </h4>
+
+                    <input value="@GetCardTitle(col.Id)"
+                           @oninput="e => SetCardTitle(col.Id, e.Value?.ToString())"
+                           placeholder="Новая карточка" />
+
+                    <select value="@GetPriority(col.Id)"
+                            @onchange="e => SetPriority(col.Id, e.Value?.ToString())">
+                        <option value="Low">Low</option>
+                        <option value="Medium">Medium</option>
+                        <option value="High">High</option>
+                    </select>
+
+                    <select value="@GetAssignee(col.Id)"
+                            @onchange="e => SetAssignee(col.Id, e.Value?.ToString())">
+                        <option value="0">-- без исполнителя --</option>
+                        @foreach (var u in users ?? new())
+                        {
+                            <option value="@u.Id">@u.Login</option>
+                        }
+                    </select>
+
+                    <input type="date"
+                           value="@GetDeadline(col.Id)"
+                           @onchange="e => SetDeadline(col.Id, e.Value?.ToString())" />
+
+                    <button @onclick="() => CreateCard(col.Id)">+ Добавить</button>
+
+                    <div class="kanban-column-body"
+                         data-column-id="@col.Id">
+                        @if (col.Cards.Count == 0)
+                        {
+                            <div class="empty-column">
+                                Нет карточек
+                            </div>
+                        }
+                        else
+                        {
+                            @foreach (var card in FilterCards(col.Cards))
+                            {
+                                <div class="kanban-card"
+                                     data-card-id="@card.Id"
+                                     draggable="true"
+                                     @ondblclick="() => OpenEdit(card)">
+
+                                    <div class="card-header-row">
+                                        <b>@card.Title</b>
+                                        <span class="priority-badge @GetPriorityClass(card.Priority)">
+                                            @card.Priority
+                                        </span>
+                                    </div>
+
+                                    <div class="card-meta-row">
+                                        @if (card.Deadline.HasValue)
+                                        {
+                                            <span class="card-deadline">@card.Deadline.Value.ToString("dd.MM.yyyy")</span>
+                                        }
+                                        @if (card.AssigneeId.HasValue)
+                                        {
+                                            <span class="card-avatar" title="@GetUserName(card.AssigneeId.Value)">
+                                                @GetUserInitial(card.AssigneeId.Value)
+                                            </span>
+                                        }
+                                    </div>
+
+                                    <div class="card-actions-row">
+                                        <button @onclick="() => MoveCard(card.Id, -1)" class="card-btn">◄</button>
+                                        <button @onclick="() => MoveCard(card.Id, +1)" class="card-btn">►</button>
+                                        <button @onclick="() => DeleteCard(card.Id)" class="card-btn card-btn-delete">✕</button>
+                                    </div>
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+}
+
+@if (editingCard != null)
+{
+    <div class="kanban-modal">
+        <div class="kanban-modal-content">
+            <h4>Редактирование карточки</h4>
+
+            <label>Название:</label>
+            <input @bind="editTitle" />
+
+            <label>Приоритет:</label>
+            <select @bind="editPriority">
+                <option value="Low">Low</option>
+                <option value="Medium">Medium</option>
+                <option value="High">High</option>
+            </select>
+
+            <label>Исполнитель:</label>
+            <select @bind="editAssigneeId">
+                <option value="0">-- без исполнителя --</option>
+                @foreach (var u in users ?? new())
+                {
+                    <option value="@u.Id">@u.Login</option>
+                }
+            </select>
+
+            <label>Дата:</label>
+            <input type="date" @bind="editDeadline" />
+
+            <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:10px;">
+                <button @onclick="SaveEdit" style="background:#27ae60;">Сохранить</button>
+                <button @onclick="CancelEdit" style="background:#95a5a6;">Отмена</button>
+            </div>
+        </div>
     </div>
 }
 
 @code {
     [Parameter] public int ProjectId { get; set; }
 
+    private DotNetObjectReference<BoardPage>? _objRef;
     private List<Board>? boards;
     private List<Column>? columns;
+    private List<UserDto>? users;
     private int currentBoardId = 0;
 
     private string newBoardName = "";
     private string newColumnName = "";
+    private string searchText = "";
+
     private Dictionary<int, string> newCardTitles = new();
+    private Dictionary<int, string> selectedPriority = new();
+    private Dictionary<int, int> selectedAssignee = new();
+    private Dictionary<int, DateTime?> selectedDeadline = new();
+
+    private Card? editingCard;
+    private string editTitle = "";
+    private string editPriority = "Medium";
+    private DateTime? editDeadline;
+    private int editAssigneeId = 0;
+
+    private int TotalCards => columns?.Sum(c => c.Cards.Count) ?? 0;
+    private int DoneCards
+    {
+        get
+        {
+            if (columns == null || columns.Count == 0) return 0;
+            var last = columns.OrderBy(c => c.Order).LastOrDefault();
+            return last?.Cards.Count ?? 0;
+        }
+    }
+    private int ProgressPercent => TotalCards == 0 ? 0 : (int)((double)DoneCards / TotalCards * 100);
 
     protected override async Task OnInitializedAsync()
     {
@@ -69,6 +250,26 @@
             Nav.NavigateTo("/login");
             return;
         }
+
+        try
+        {
+            _objRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("dragDropHelper.init", _objRef);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("JS init failed: " + ex.Message);
+        }
+
+        try
+        {
+            users = await Api.GetUsersAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Users load failed: " + ex.Message);
+        }
+
         boards = await Api.GetBoardsAsync(ProjectId);
         StateHasChanged();
     }
@@ -78,6 +279,22 @@
         if (currentBoardId > 0)
         {
             columns = await Api.GetColumnsAsync(currentBoardId);
+
+            foreach (var col in columns ?? new())
+            {
+                if (!newCardTitles.ContainsKey(col.Id))
+                    newCardTitles[col.Id] = "";
+
+                if (!selectedPriority.ContainsKey(col.Id))
+                    selectedPriority[col.Id] = "Medium";
+
+                if (!selectedAssignee.ContainsKey(col.Id))
+                    selectedAssignee[col.Id] = 0;
+
+                if (!selectedDeadline.ContainsKey(col.Id))
+                    selectedDeadline[col.Id] = null;
+            }
+
             StateHasChanged();
         }
     }
@@ -104,8 +321,16 @@
     {
         if (!newCardTitles.TryGetValue(columnId, out var title) || string.IsNullOrWhiteSpace(title))
             return;
-        await Api.CreateCardAsync(title, columnId);
+
+        int? assigneeId = selectedAssignee.TryGetValue(columnId, out var a) && a > 0 ? a : null;
+        DateTime? deadline = selectedDeadline.TryGetValue(columnId, out var d) ? d : null;
+        string priority = selectedPriority.TryGetValue(columnId, out var p) ? p : "Medium";
+
+        await Api.CreateCardAsync(title, columnId, assigneeId, priority, deadline);
         newCardTitles[columnId] = "";
+        selectedPriority[columnId] = "Medium";
+        selectedAssignee[columnId] = 0;
+        selectedDeadline[columnId] = null;
         await LoadColumns();
         StateHasChanged();
     }
@@ -132,16 +357,140 @@
         StateHasChanged();
     }
 
+    [JSInvokable]
+    public async Task OnCardDropped(int cardId, int columnId)
+    {
+        await Api.MoveCardAsync(cardId, columnId);
+        await LoadColumns();
+        StateHasChanged();
+    }
 
     private string GetCardTitle(int columnId)
     {
-        if (newCardTitles.TryGetValue(columnId, out var value))
-            return value;
-        return string.Empty;
+        return newCardTitles.TryGetValue(columnId, out var v) ? v : "";
     }
 
     private void SetCardTitle(int columnId, string? value)
     {
         newCardTitles[columnId] = value ?? string.Empty;
+    }
+
+    private string GetPriority(int columnId)
+    {
+        return selectedPriority.TryGetValue(columnId, out var v) ? v : "Medium";
+    }
+
+    private void SetPriority(int columnId, string? value)
+    {
+        selectedPriority[columnId] = value ?? "Medium";
+    }
+
+    private int GetAssignee(int columnId)
+    {
+        return selectedAssignee.TryGetValue(columnId, out var v) ? v : 0;
+    }
+
+    private void SetAssignee(int columnId, string? value)
+    {
+        if (int.TryParse(value, out var id))
+            selectedAssignee[columnId] = id;
+        else
+            selectedAssignee[columnId] = 0;
+    }
+
+    private DateTime? GetDeadline(int columnId)
+    {
+        return selectedDeadline.TryGetValue(columnId, out var v) ? v : null;
+    }
+
+    private void SetDeadline(int columnId, string? value)
+    {
+        if (DateTime.TryParse(value, out var dt))
+            selectedDeadline[columnId] = dt;
+        else
+            selectedDeadline[columnId] = null;
+    }
+
+    private string GetUserName(int userId)
+    {
+        var user = users?.FirstOrDefault(u => u.Id == userId);
+        return user?.Login ?? "?";
+    }
+
+    private string GetUserInitial(int userId)
+    {
+        var user = users?.FirstOrDefault(u => u.Id == userId);
+        return user?.Login?.FirstOrDefault().ToString().ToUpper() ?? "?";
+    }
+
+    private string GetPriorityClass(string priority)
+    {
+        return priority switch
+        {
+            "High" => "priority-high",
+            "Low" => "priority-low",
+            _ => "priority-medium"
+        };
+    }
+
+    private IEnumerable<Card> FilterCards(IEnumerable<Card> cards)
+    {
+        if (string.IsNullOrWhiteSpace(searchText))
+            return cards;
+
+        return cards.Where(c =>
+            c.Title.Contains(searchText, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void OpenEdit(Card card)
+    {
+        editingCard = card;
+        editTitle = card.Title;
+        editPriority = card.Priority;
+        editDeadline = card.Deadline;
+        editAssigneeId = card.AssigneeId ?? 0;
+    }
+
+    private void CancelEdit()
+    {
+        editingCard = null;
+    }
+
+    private async Task SaveEdit()
+    {
+        if (editingCard == null) return;
+        if (string.IsNullOrWhiteSpace(editTitle))
+        {
+            Console.WriteLine("Название обязательно");
+            return;
+        }
+
+        int? assigneeId = editAssigneeId > 0 ? editAssigneeId : null;
+
+        await Api.UpdateCardAsync(editingCard.Id, editTitle, editPriority,
+            editDeadline, assigneeId);
+
+        editingCard = null;
+        await LoadColumns();
+        StateHasChanged();
+    }
+
+    private string GetColumnColor(int order)
+    {
+        var colors = new[]
+        {
+            "#f7c948",
+            "#4dabf7",
+            "#51cf66",
+            "#f783ac",
+            "#b197fc",
+            "#ff922b"
+        };
+        return colors[order % colors.Length];
+    }
+
+    public void Dispose()
+    {
+        _objRef?.Dispose();
     }
 }

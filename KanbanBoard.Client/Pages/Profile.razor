@@ -1,0 +1,51 @@
+﻿@page "/profile"
+@using KanbanBoard.Client.Services
+@inject Blazored.LocalStorage.ILocalStorageService LocalStorage
+@inject NavigationManager Nav
+
+<h3>Профиль пользователя</h3>
+
+<div class="profile-card">
+    <div class="profile-avatar-big">
+        @(userLogin?.FirstOrDefault().ToString().ToUpper() ?? "?")
+    </div>
+
+    <div class="profile-info">
+        <div class="profile-row">
+            <span class="profile-label">Логин:</span>
+            <span class="profile-value">@(userLogin ?? "—")</span>
+        </div>
+        <div class="profile-row">
+            <span class="profile-label">Роль:</span>
+            <span class="profile-value">@(userRole ?? "—")</span>
+        </div>
+        <div class="profile-row">
+            <span class="profile-label">Токен:</span>
+            <span class="profile-value">@(hasToken ? "Активен" : "Не найден")</span>
+        </div>
+    </div>
+
+    <button class="profile-logout" @onclick="Logout">Выйти из аккаунта</button>
+</div>
+
+@code {
+    private string? userLogin;
+    private string? userRole;
+    private bool hasToken;
+
+    protected override async Task OnInitializedAsync()
+    {
+        userLogin = await LocalStorage.GetItemAsync<string>("login");
+        userRole = await LocalStorage.GetItemAsync<string>("role");
+        var token = await LocalStorage.GetItemAsync<string>("token");
+        hasToken = !string.IsNullOrWhiteSpace(token);
+    }
+
+    private async Task Logout()
+    {
+        await LocalStorage.RemoveItemAsync("token");
+        await LocalStorage.RemoveItemAsync("login");
+        await LocalStorage.RemoveItemAsync("role");
+        Nav.NavigateTo("/login", forceLoad: true);
+    }
+}

@@ -5,10 +5,10 @@
 
 <h3>Мои проекты</h3>
 
-<p>
-    <input @bind="newProjectName" placeholder="Название проекта" />
-    <button @onclick="CreateProject">Создать</button>
-</p>
+<div class="project-form">
+    <input @bind="newProjectName" placeholder="Название нового проекта" />
+    <button @onclick="CreateProject">+ Создать проект</button>
+</div>
 
 @if (projects == null)
 {
@@ -16,18 +16,24 @@
 }
 else if (projects.Count == 0)
 {
-    <p>Проектов пока нет.</p>
+    <div class="empty-state">
+        <div class="empty-state-icon">✕</div>
+        <div class="empty-state-title">Пока нет ни одного проекта</div>
+        <div class="empty-state-text">
+            Создайте первый проект, чтобы начать работу с Kanban-доской.
+        </div>
+    </div>
 }
 else
 {
-    <ul>
+    <div class="project-list">
         @foreach (var p in projects)
         {
-            <li>
+            <div class="project-card">
                 <a href="/boardpage/@p.Id">@p.Name</a>
-            </li>
+            </div>
         }
-    </ul>
+    </div>
 }
 
 @code {
